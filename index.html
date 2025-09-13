@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Workout Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-900">
+  <!-- Main Container -->
+  <div id="app" class="min-h-screen flex flex-col items-center justify-center p-4">
+    <!-- Screens go here -->
+    <div id="home-screen" class="w-full max-w-md space-y-6 text-center">
+      <h1 class="text-3xl font-bold">Hi Boaz!</h1>
+      <h2 class="text-2xl font-semibold">Workout Tracker</h2>
+      <button id="btn-workout-a" class="w-full py-6 bg-blue-500 text-white rounded-lg text-xl hover:bg-blue-600">
+        Workout A
+      </button>
+      <button id="btn-workout-b" class="w-full py-6 bg-green-500 text-white rounded-lg text-xl hover:bg-green-600">
+        Workout B
+      </button>
+    </div>
+
+    <!-- Workout Detail Screen -->
+    <div id="detail-screen" class="hidden w-full max-w-md space-y-4">
+      <button id="btn-back-home" class="text-blue-500 hover:underline">&larr; Back</button>
+      <h2 id="workout-title" class="text-2xl font-semibold">Workout</h2>
+      <div id="exercise-list" class="space-y-2"></div>
+      <button id="btn-start-workout" class="w-full py-4 bg-blue-600 text-white rounded-lg text-lg hover:bg-blue-700">
+        Start Workout
+      </button>
+    </div>
+
+    <!-- Active Workout Screen -->
+    <div id="active-workout-screen" class="hidden w-full max-w-md space-y-4">
+      <img id="exercise-image" src="https://placehold.co/600x400" alt="exercise" class="rounded-lg" />
+      <h2 id="exercise-name" class="text-2xl font-bold"></h2>
+      <h3 id="set-counter" class="text-lg text-gray-600"></h3>
+
+      <!-- Rest Timer Display -->
+      <div id="timer-display" class="hidden text-center cursor-pointer hover:bg-gray-100 p-4 rounded-lg" title="Click to skip rest">
+        <h3 class="text-xl font-bold text-blue-600">Rest Time</h3>
+        <div id="timer-value" class="text-4xl font-mono text-blue-500">1:15</div>
+        <p class="text-sm text-gray-500 mt-2">👆 Tap to skip</p>
+      </div>
+
+      <button id="btn-complete-set" class="w-full py-4 bg-blue-500 text-white rounded-lg text-lg hover:bg-blue-600">
+        Complete Set
+      </button>
+      <button id="btn-back-detail" class="w-full py-3 bg-gray-400 text-white rounded-lg text-lg hover:bg-gray-500">
+        Back
+      </button>
+      <button id="btn-finish-workout" class="w-full py-4 bg-green-500 text-white rounded-lg text-lg hidden hover:bg-green-600">
+        Finish Workout
+      </button>
+    </div>
+
+    <!-- Muscle Group Transition Screen -->
+    <div id="muscle-group-screen" class="hidden w-full max-w-md text-center space-y-6">
+      <h2 class="text-3xl font-bold" id="muscle-group-title">Next: Chest</h2>
+      <p class="text-lg text-gray-600" id="muscle-group-description">Time to work on your chest muscles!</p>
+      <button id="btn-continue-muscle-group" class="py-4 px-6 bg-blue-600 text-white rounded-lg text-lg hover:bg-blue-700">
+        Let's Go! 💪
+      </button>
+    </div>
+
+    <!-- Workout Complete Screen -->
+    <div id="complete-screen" class="hidden w-full max-w-md text-center space-y-6">
+      <h2 class="text-2xl font-bold">Workout Complete! 🎉</h2>
+      <button id="btn-back-home-complete" class="py-4 px-6 bg-blue-600 text-white rounded-lg text-lg hover:bg-blue-700">
+        Back to Home
+      </button>
+    </div>
+  </div>
+
+  <!-- Firebase and App Script -->
+  <script type="module">
+    // Firebase Setup
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { getFirestore, collection, addDoc, query, where, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+    let currentUser = null;
+
+    // Sign in anonymously but suppress errors silently
+    signInAnonymously(auth).then(() => {
+      // success
+    }).catch(() => {
+      // ignore auth errors
+    });
+
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        currentUser = user;
+      } else {
+        // fallback: create a pseudo user when auth fails
+        currentUser = { uid: "guest-user" };
+      }
+    });
+
+    // Workout Data (updated structure with names and expanded exercises)
+    const workoutPlan = {
+      A: {
+        name: "Chest, Shoulders and Biceps workout",
+        muscleGroups: [
+          {
+            name: "Chest",
+            description: "Time to work on your chest muscles!",
+            exercises: [
+              { id: 'bench_press', name: 'Bench Press', sets: 3, imageUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Barbell-Bench-Press.gif' },
+              { id: 'chest_press_machine', name: 'Chest Press Machine', sets: 3, imageUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Chest-Press-Machine.gif' },
+              { id: 'push_up', name: 'Push Up', sets: 3, imageUrl: 'https://kinxlearning.com/cdn/shop/files/Pushup_1200x.jpg?v=1705765225' },
+              { id: 'butterfly', name: 'Butterfly', sets: 3, imageUrl: 'https://training.fit/wp-content/uploads/2020/02/butterflys.png' }
+            ]
+          },
+          {
+            name: "Shoulders",
+            description: "Let's strengthen those shoulders!",
+            exercises: [
+              { id: 'shoulder_press', name: 'Shoulder Press', sets: 3, imageUrl: 'https://s3assets.skimble.com/assets/2760799/image_iphone.jpg' },
+              { id: 'dumbbell_lateral_raise', name: 'Dumbbell Lateral Raise', sets: 3, imageUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Dumbbell-Lateral-Raise.gif' }
+            ]
+          },
+          {
+            name: "Biceps",
+            description: "Time to pump those biceps!",
+            exercises: [
+              { id: 'barbell_curls', name: 'Barbell Curls', sets: 3, imageUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Barbell-Curl.gif' },
+              { id: 'dumbbell_hammer_curls', name: 'Dumbbell Hammer Curls', sets: 3, imageUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Hammer-Curl.gif' }
+            ]
+          },
+          {
+            name: "Core",
+            description: "Finish strong with core work!",
+            exercises: [
+              { id: 'plank', name: 'Plank', sets: 3, imageUrl: 'https://blog-images-1.pharmeasy.in/blog/production/wp-content/uploads/2021/01/06152556/3.jpg' }
+            ]
+          }
+        ]
+      },
+      B: {
+        name: "Workout B: Back, Legs & Triceps",
+        muscleGroups: [
+          {
+            name: "Back",
+            description: "Let's build a strong back!",
+            exercises: [
+              { id: 'pull_ups', name: 'Pull-Ups / Lat Pulldown', sets: 3, imageUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Lat-Pulldown.gif' },
+              { id: 'assisted_pull_ups', name: 'Pull Ups', sets: 3, imageUrl: 'https://selectfitness.com/cdn/shop/files/body-solid-assisted-chin-dip-s2acd-woman-pull-up-white-background_1390x1390.jpg?v=1712600511' },
+              { id: 'back_pull_machine', name: 'Back Pull Machine', sets: 3, imageUrl: 'https://hips.hearstapps.com/hmg-prod/images/2-1580916390.jpg' },
+              { id: 'rear_delt_fly', name: 'Rear Fly Machine', sets: 3, imageUrl: 'https://anabolicaliens.com/cdn/shop/articles/5f9892a2b0625c92c74ee6b8_rear-delt-fly-machine-picture_500x.png?v=1641754148' },
+              { id: 'seated_cable_row', name: 'Seated Cable Row', sets: 3, imageUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Seated-Cable-Row.gif' }
+            ]
+          },
+          {
+            name: "Legs",
+            description: "Time for some leg power!",
+            exercises: [
+              { id: 'leg_press', name: 'Leg Press', sets: 3, imageUrl: 'https://hips.hearstapps.com/hmg-prod/images/leg-press-67b8637749b94.jpg?crop=1.00xw:1.00xh;0,0&resize=1200:*' },
+              { id: 'leg_extension', name: 'Leg Extension Machine', sets: 3, imageUrl: 'https://cdn.shopify.com/s/files/1/0252/3155/6686/files/Leg_Extension_Machine_1.jpg?v=1710959433' },
+              { id: 'hamstring_curl', name: 'Hamstrings Legs Curl', sets: 3, imageUrl: 'https://watsongym.co.uk/wp-content/uploads/2023/03/Seated-Leg-Curl-2.jpg' },
+              { id: 'calf_raises', name: 'Calf Raises', sets: 3, imageUrl: 'https://treadmillfactory.ca/cdn/shop/products/gscr349_ex_calfraise_1.png' }
+            ]
+          },
+          {
+            name: "Triceps",
+            description: "Let's finish with triceps!",
+            exercises: [
+              { id: 'triceps_pushdown', name: 'Triceps Pushdown', sets: 4, imageUrl: 'https://anabolicaliens.com/cdn/shop/articles/5fb55f667f160c562e9e4172_reverse-grip-tricep-pushdown_400x.png?v=1641751032' }
+            ]
+          },
+          {
+            name: "Core",
+            description: "Finish strong with core work!",
+            exercises: [
+              { id: 'plank', name: 'Plank', sets: 3, imageUrl: 'https://blog-images-1.pharmeasy.in/blog/production/wp-content/uploads/2021/01/06152556/3.jpg' }
+            ]
+          }
+        ]
+      }
+    };
+
+    // State
+    let currentWorkoutType = null;
+    let currentMuscleGroups = [];
+    let currentMuscleGroupIndex = 0;
+    let currentExercises = [];
+    let currentExerciseIndex = 0;
+    let currentSetNumber = 1;
+
+    // DOM Elements
+    const homeScreen = document.getElementById('home-screen');
+    const detailScreen = document.getElementById('detail-screen');
+    const activeWorkoutScreen = document.getElementById('active-workout-screen');
+    const muscleGroupScreen = document.getElementById('muscle-group-screen');
+    const completeScreen = document.getElementById('complete-screen');
+
+    const btnWorkoutA = document.getElementById('btn-workout-a');
+    const btnWorkoutB = document.getElementById('btn-workout-b');
+    const btnBackHome = document.getElementById('btn-back-home');
+    const btnStartWorkout = document.getElementById('btn-start-workout');
+    const btnCompleteSet = document.getElementById('btn-complete-set');
+    const btnBackDetail = document.getElementById('btn-back-detail');
+    const btnContinueMuscleGroup = document.getElementById('btn-continue-muscle-group');
+    const btnFinishWorkout = document.getElementById('btn-finish-workout');
+    const btnBackHomeComplete = document.getElementById('btn-back-home-complete');
+
+    const workoutTitle = document.getElementById('workout-title');
+    const exerciseList = document.getElementById('exercise-list');
+    const muscleGroupTitle = document.getElementById('muscle-group-title');
+    const muscleGroupDescription = document.getElementById('muscle-group-description');
+
+    const exerciseImage = document.getElementById('exercise-image');
+    const exerciseName = document.getElementById('exercise-name');
+    const setCounter = document.getElementById('set-counter');
+    const timerDisplay = document.getElementById('timer-display');
+    const timerValue = document.getElementById('timer-value');
+
+    let restTimer = null;
+    let remainingTime = 0;
+
+    const showScreen = (screen) => {
+      [homeScreen, detailScreen, activeWorkoutScreen, muscleGroupScreen, completeScreen].forEach(s => s.classList.add('hidden'));
+      screen.classList.remove('hidden');
+    };
+
+    // Home Screen
+    btnWorkoutA.addEventListener('click', () => {
+      currentWorkoutType = 'A';
+      currentMuscleGroups = workoutPlan.A.muscleGroups;
+      workoutTitle.textContent = workoutPlan.A.name;
+      
+      // Flatten all exercises for display
+      const allExercises = currentMuscleGroups.flatMap(group => group.exercises);
+      exerciseList.innerHTML = allExercises.map(ex =>
+        `<div class="p-2 border rounded flex items-center space-x-2">
+           <img src="${ex.imageUrl}" class="w-16 h-16 object-cover rounded" alt="${ex.name}" />
+           <span class="text-lg">${ex.name}</span>
+         </div>`
+      ).join('');
+      showScreen(detailScreen);
+    });
+
+    btnWorkoutB.addEventListener('click', () => {
+      currentWorkoutType = 'B';
+      currentMuscleGroups = workoutPlan.B.muscleGroups;
+      workoutTitle.textContent = workoutPlan.B.name;
+      
+      // Flatten all exercises for display
+      const allExercises = currentMuscleGroups.flatMap(group => group.exercises);
+      exerciseList.innerHTML = allExercises.map(ex =>
+        `<div class="p-2 border rounded flex items-center space-x-2">
+           <img src="${ex.imageUrl}" class="w-16 h-16 object-cover rounded" alt="${ex.name}" />
+           <span class="text-lg">${ex.name}</span>
+         </div>`
+      ).join('');
+      showScreen(detailScreen);
+    });
+
+    btnBackHome.addEventListener('click', () => showScreen(homeScreen));
+
+    // Function to shuffle array randomly, keeping Core (plank) always last
+    function shuffleArray(array) {
+      const coreIndex = array.findIndex(group => group.name === "Core");
+      let coreGroup = null;
+      
+      // Remove Core group if it exists
+      let shuffled = [...array];
+      if (coreIndex !== -1) {
+        coreGroup = shuffled.splice(coreIndex, 1)[0];
+      }
+      
+      // Shuffle the remaining groups
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      
+      // Add Core group back at the end
+      if (coreGroup) {
+        shuffled.push(coreGroup);
+      }
+      
+      return shuffled;
+    }
+
+    btnStartWorkout.addEventListener('click', () => {
+      // Randomize muscle group order for variety, keeping Core always last
+      currentMuscleGroups = shuffleArray(currentMuscleGroups);
+      console.log("Randomized muscle group order:", currentMuscleGroups.map(g => g.name));
+      
+      currentMuscleGroupIndex = 0;
+      currentExerciseIndex = 0;
+      currentSetNumber = 1;
+      showMuscleGroupTransition();
+    });
+
+    function showMuscleGroupTransition() {
+      if (currentMuscleGroupIndex < currentMuscleGroups.length) {
+        const muscleGroup = currentMuscleGroups[currentMuscleGroupIndex];
+        muscleGroupTitle.textContent = `Next: ${muscleGroup.name}`;
+        muscleGroupDescription.textContent = muscleGroup.description;
+        showScreen(muscleGroupScreen);
+      } else {
+        showScreen(completeScreen);
+      }
+    }
+
+    btnContinueMuscleGroup.addEventListener('click', () => {
+      currentExercises = currentMuscleGroups[currentMuscleGroupIndex].exercises;
+      currentExerciseIndex = 0;
+      currentSetNumber = 1;
+      loadExercise();
+      showScreen(activeWorkoutScreen);
+    });
+
+    async function loadExercise() {
+      const ex = currentExercises[currentExerciseIndex];
+      exerciseImage.src = ex.imageUrl;
+      exerciseName.textContent = ex.name;
+
+      const totalSets = ex.sets || 3; // use exercise-specific sets or default to 3
+      setCounter.textContent = `Set ${currentSetNumber} of ${totalSets} — Exercise ${currentExerciseIndex + 1} of ${currentExercises.length}`;
+    }
+
+    function stopRestTimer() {
+      if (restTimer) {
+        clearInterval(restTimer);
+        restTimer = null;
+      }
+      timerDisplay.classList.add('hidden');
+      btnCompleteSet.textContent = "Complete Set";
+      btnCompleteSet.disabled = false;
+    }
+
+    function startRestTimer() {
+      remainingTime = 75; // 1:15 in seconds
+      timerDisplay.classList.remove('hidden');
+      
+      restTimer = setInterval(() => {
+        const minutes = Math.floor(remainingTime / 60);
+        const seconds = remainingTime % 60;
+        timerValue.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        
+        remainingTime--;
+        
+        if (remainingTime < 0) {
+          stopRestTimer();
+        }
+      }, 1000);
+    }
+
+    // Click timer to skip rest
+    timerDisplay.addEventListener('click', () => {
+      console.log("Rest timer skipped");
+      stopRestTimer();
+    });
+
+    btnCompleteSet.addEventListener('click', () => {
+      console.log("Complete Set button clicked"); // Debug log
+      
+      // Move to next set or exercise
+      const ex = currentExercises[currentExerciseIndex];
+      const totalSets = ex.sets || 3; // use exercise-specific sets or default to 3
+      
+      currentSetNumber++;
+
+      console.log(`Current set: ${currentSetNumber}, Exercise: ${currentExerciseIndex + 1}`); // Debug log
+
+      if (currentSetNumber > totalSets) {
+        currentExerciseIndex++;
+        currentSetNumber = 1;
+        console.log(`Moving to next exercise: ${currentExerciseIndex + 1}`); // Debug log
+        
+        if (currentExerciseIndex >= currentExercises.length) {
+          // Finished all exercises in current muscle group
+          currentMuscleGroupIndex++;
+          currentExerciseIndex = 0;
+          console.log("Moving to next muscle group"); // Debug log
+          showMuscleGroupTransition();
+          return;
+        } else {
+          loadExercise();
+          return;
+        }
+      } else {
+        // Update the set counter for same exercise
+        loadExercise();
+        
+        // Start rest timer between sets (but not after last set of exercise)
+        if (currentSetNumber <= totalSets) {
+          startRestTimer();
+          btnCompleteSet.textContent = "Resting...";
+          btnCompleteSet.disabled = true;
+        }
+      }
+    });
+
+    // Back button logic - go to previous exercise/muscle group or home if first
+    btnBackDetail.addEventListener('click', () => {
+      // If we're at the first set of the first exercise of the first muscle group
+      if (currentMuscleGroupIndex === 0 && currentExerciseIndex === 0 && currentSetNumber === 1) {
+        showScreen(homeScreen);
+        return;
+      }
+      
+      // Go back one step in the workout
+      if (currentSetNumber > 1) {
+        // Go back to previous set
+        currentSetNumber--;
+        loadExercise();
+      } else if (currentExerciseIndex > 0) {
+        // Go back to previous exercise, last set
+        currentExerciseIndex--;
+        const ex = currentExercises[currentExerciseIndex];
+        currentSetNumber = ex.sets || 3;
+        loadExercise();
+      } else if (currentMuscleGroupIndex > 0) {
+        // Go back to previous muscle group, last exercise, last set
+        currentMuscleGroupIndex--;
+        currentExercises = currentMuscleGroups[currentMuscleGroupIndex].exercises;
+        currentExerciseIndex = currentExercises.length - 1;
+        const ex = currentExercises[currentExerciseIndex];
+        currentSetNumber = ex.sets || 3;
+        loadExercise();
+      } else {
+        // We're at the beginning, go to home
+        showScreen(homeScreen);
+      }
+    });
+
+    btnFinishWorkout.addEventListener('click', () => showScreen(completeScreen));
+    btnBackHomeComplete.addEventListener('click', () => showScreen(homeScreen));
+  </script>
+</body>
+</html>
